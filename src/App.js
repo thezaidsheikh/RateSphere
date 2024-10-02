@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const tempMovieData = [
   {
@@ -42,19 +42,59 @@ const tempWatchedData = [
   },
 ];
 
+const KEY = "8cf2c987";
 export default function App() {
   const [movies, setMovies] = useState(tempMovieData);
   const [watched, setWatched] = useState(tempWatchedData);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [query, setQuery] = useState("");
+  // useEffect(function () {
+  //   console.log("After intial render");
+  // }, []);
+  // useEffect(function () {
+  //   console.log("After every render");
+  // });
+  // console.log("inside render");
+  useEffect(
+    function () {
+      async function fetchMovies() {
+        try {
+          setIsLoading(true);
+          setErrorMessage("");
+          const res = await fetch(`http://www.omdbapi.com/?apikey=${KEY}&s=${query}`);
+          const data = await res.json();
+          if (!data || data.Response == "False") throw new Error("Movie not found");
+          setMovies(data.Search);
+        } catch (error) {
+          console.log("Error in fetch movies", error);
+          setErrorMessage(error.message);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+      if (query.length < 3) {
+        setMovies([]);
+        setErrorMessage("");
+        return;
+      }
+      fetchMovies();
+    },
+    [query]
+  );
+
   return (
     <>
       <NavBar>
         <Logo />
-        <Search />
+        <Search query={query} setQuery={setQuery} />
         <NumOfResult movies={movies} />
       </NavBar>
       <Main>
         <List>
-          <MoviesList movies={movies} />
+          {isLoading && <Loader />}
+          {!isLoading && errorMessage && <ErrorMessage message={errorMessage} />}
+          {!isLoading && !errorMessage && <MoviesList movies={movies} />}
         </List>
         <List>
           <WatchedSummary watched={watched} />
@@ -64,6 +104,10 @@ export default function App() {
     </>
   );
 }
+
+const Loader = () => <p className="loader">LOADER...</p>;
+
+const ErrorMessage = ({ message }) => <p className="error">{message}</p>;
 
 const average = (arr) => arr.reduce((acc, cur, i, arr) => acc + cur / arr.length, 0);
 
@@ -84,8 +128,7 @@ const Logo = () => {
   );
 };
 
-const Search = () => {
-  const [query, setQuery] = useState("");
+const Search = ({ query, setQuery }) => {
   return <input className="search" type="text" placeholder="Search movies..." value={query} onChange={(e) => setQuery(e.target.value)} />;
 };
 
