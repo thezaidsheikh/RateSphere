@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import StarRating from "./StarRating";
 
 const tempMovieData = [
   {
@@ -45,10 +46,11 @@ const tempWatchedData = [
 const KEY = "8cf2c987";
 export default function App() {
   const [movies, setMovies] = useState(tempMovieData);
-  const [watched, setWatched] = useState(tempWatchedData);
+  const [watched, setWatched] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState();
   // useEffect(function () {
   //   console.log("After intial render");
   // }, []);
@@ -56,6 +58,20 @@ export default function App() {
   //   console.log("After every render");
   // });
   // console.log("inside render");
+  function handleSelectMovie(id) {
+    if (id == selectedId) handleCloseMovie();
+    else if (id) setSelectedId(id);
+  }
+  function handleCloseMovie(selectedId) {
+    setSelectedId(null);
+  }
+  function handleAddWatched(movie) {
+    setWatched((watched) => [...watched, movie]);
+  }
+
+  function handleDeleteWatched(id) {
+    setWatched((watched) => watched.filter((movie) => movie.imdbId !== id));
+  }
   useEffect(
     function () {
       async function fetchMovies() {
@@ -94,11 +110,17 @@ export default function App() {
         <List>
           {isLoading && <Loader />}
           {!isLoading && errorMessage && <ErrorMessage message={errorMessage} />}
-          {!isLoading && !errorMessage && <MoviesList movies={movies} />}
+          {!isLoading && !errorMessage && <MoviesList movies={movies} onMovieSelect={handleSelectMovie} />}
         </List>
         <List>
-          <WatchedSummary watched={watched} />
-          <WatchedList watched={watched} />
+          {selectedId ? (
+            <MovieDetail selectedId={selectedId} onCloseMovie={handleCloseMovie} onAddWatch={handleAddWatched} watched={watched} />
+          ) : (
+            <>
+              <WatchedSummary watched={watched} />
+              <WatchedList watched={watched} onDeleteWatched={handleDeleteWatched} />
+            </>
+          )}
         </List>
       </Main>
     </>
@@ -122,8 +144,8 @@ const NavBar = ({ children }) => {
 const Logo = () => {
   return (
     <div className="logo">
-      <span role="img">🍿</span>
-      <h1>usePopcorn</h1>
+      <span role="img">🎖️</span>
+      <h1>RateSphere</h1>
     </div>
   );
 };
@@ -152,19 +174,19 @@ const List = ({ children }) => {
   );
 };
 
-const MoviesList = ({ movies }) => {
+const MoviesList = ({ movies, onMovieSelect }) => {
   return (
-    <ul className="list">
+    <ul className="list list-movies">
       {movies?.map((movie) => (
-        <Movie movie={movie} />
+        <Movie movie={movie} onMovieSelect={onMovieSelect} />
       ))}
     </ul>
   );
 };
 
-const Movie = ({ movie }) => {
+const Movie = ({ movie, onMovieSelect }) => {
   return (
-    <li key={movie.imdbID}>
+    <li key={movie.imdbID} onClick={() => onMovieSelect(movie.imdbID)}>
       <img src={movie.Poster} alt={`${movie.Title} poster`} />
       <h3>{movie.Title}</h3>
       <div>
@@ -197,7 +219,7 @@ const Movie = ({ movie }) => {
 const WatchedSummary = ({ watched }) => {
   const avgImdbRating = average(watched.map((movie) => movie.imdbRating));
   const avgUserRating = average(watched.map((movie) => movie.userRating));
-  const avgRuntime = average(watched.map((movie) => movie.runtime));
+  const avgRuntime = average(watched.map((movie) => parseInt(movie.Runtime)));
   return (
     <div className="summary">
       <h2>Movies you watched</h2>
@@ -208,11 +230,11 @@ const WatchedSummary = ({ watched }) => {
         </p>
         <p>
           <span>⭐️</span>
-          <span>{avgImdbRating}</span>
+          <span>{avgImdbRating.toFixed(2)}</span>
         </p>
         <p>
           <span>🌟</span>
-          <span>{avgUserRating}</span>
+          <span>{avgUserRating.toFixed(2)}</span>
         </p>
         <p>
           <span>⏳</span>
@@ -223,17 +245,17 @@ const WatchedSummary = ({ watched }) => {
   );
 };
 
-const WatchedList = ({ watched }) => {
+const WatchedList = ({ watched, onDeleteWatched }) => {
   return (
     <ul className="list">
       {watched.map((movie) => (
-        <WatchedMovie movie={movie} />
+        <WatchedMovie movie={movie} onDeleteWatched={onDeleteWatched} />
       ))}
     </ul>
   );
 };
 
-const WatchedMovie = ({ movie }) => {
+const WatchedMovie = ({ movie, onDeleteWatched }) => {
   return (
     <li key={movie.imdbID}>
       <img src={movie.Poster} alt={`${movie.Title} poster`} />
@@ -249,9 +271,89 @@ const WatchedMovie = ({ movie }) => {
         </p>
         <p>
           <span>⏳</span>
-          <span>{movie.runtime} min</span>
+          <span>{parseInt(movie.Runtime)} min</span>
         </p>
+        <button className="btn-delete" onClick={() => onDeleteWatched(movie.imdbId)}>
+          x
+        </button>
       </div>
     </li>
+  );
+};
+
+const MovieDetail = ({ selectedId, onCloseMovie, onAddWatch, watched }) => {
+  const [movie, setMovie] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  let [userRating, setUserRating] = useState(0);
+
+  let loading = true;
+  useEffect(
+    function () {
+      async function getMovieDetail() {
+        try {
+          setIsLoading(true);
+          const res = await fetch(`http://www.omdbapi.com/?apikey=${KEY}&i=${selectedId}`);
+          const data = await res.json();
+          if (!data || data.Response == "False") throw new Error("Movie not found");
+          setMovie(data);
+          setIsLoading(false);
+        } catch (error) {
+          console.log("Error in fetch movies", error);
+        }
+      }
+      getMovieDetail();
+    },
+    [selectedId]
+  );
+  function handleUserRating() {
+    const newWatchedMovie = {
+      ...movie,
+      imdbId: selectedId,
+      userRating: userRating,
+    };
+    onAddWatch(newWatchedMovie);
+    onCloseMovie();
+  }
+  if (isLoading || !movie) return <Loader />;
+  const watchedMovie = watched.find((movie) => movie.imdbId == selectedId);
+  return (
+    <div className="details">
+      <header>
+        <button className="btn-back" onClick={() => onCloseMovie()}>
+          &larr;
+        </button>
+        <img src={movie.Poster} alt={`${movie.Title} poster`} />
+        <div className="details-overview">
+          <h2>{movie.Title}</h2>
+          <p>
+            {movie.Released} &bull; {parseInt(movie.Runtime)} min
+          </p>
+          <p>{movie.Genre}</p>
+          <p>
+            <span>⭐️</span>
+            {movie.imdbRating} IMDB Rating
+          </p>
+        </div>
+      </header>
+      <section>
+        <div className="rating">
+          {!watchedMovie ? (
+            <>
+              <StarRating maxRating={10} size={24} color="orange" onSetRating={setUserRating} />
+              <button className="btn-add" onClick={handleUserRating}>
+                + Add to list
+              </button>
+            </>
+          ) : (
+            <p>You have already rated this movie ⭐️ {watchedMovie.userRating}</p>
+          )}
+        </div>
+        <p>
+          <em>{movie.Plot}</em>
+        </p>
+        <p>Starring {movie.Actors}</p>
+        <p>Directed by {movie.Director}</p>
+      </section>
+    </div>
   );
 };
