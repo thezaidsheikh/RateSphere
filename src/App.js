@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import StarRating from "./StarRating";
 
 const tempMovieData = [
@@ -46,18 +46,16 @@ const tempWatchedData = [
 const KEY = "8cf2c987";
 export default function App() {
   const [movies, setMovies] = useState(tempMovieData);
-  const [watched, setWatched] = useState([]);
+  // const [watched, setWatched] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState();
-  // useEffect(function () {
-  //   console.log("After intial render");
-  // }, []);
-  // useEffect(function () {
-  //   console.log("After every render");
-  // });
-  // console.log("inside render");
+  const [watched, setWatched] = useState(function () {
+    const watched = localStorage.getItem("watched");
+    if (watched) return JSON.parse(watched);
+    return [];
+  });
   function handleSelectMovie(id) {
     if (id == selectedId) handleCloseMovie();
     else if (id) setSelectedId(id);
@@ -73,6 +71,7 @@ export default function App() {
   function handleDeleteWatched(id) {
     setWatched((watched) => watched.filter((movie) => movie.imdbId !== id));
   }
+
   useEffect(
     function () {
       const controller = new AbortController();
@@ -107,6 +106,12 @@ export default function App() {
     [query]
   );
 
+  useEffect(
+    function () {
+      localStorage.setItem("watched", JSON.stringify(watched));
+    },
+    [watched]
+  );
   return (
     <>
       <NavBar>
@@ -159,7 +164,11 @@ const Logo = () => {
 };
 
 const Search = ({ query, setQuery }) => {
-  return <input className="search" type="text" placeholder="Search movies..." value={query} onChange={(e) => setQuery(e.target.value)} />;
+  const inputEl = useRef(null);
+  useEffect(function () {
+    inputEl.current.focus();
+  }, []);
+  return <input className="search" type="text" placeholder="Search movies..." value={query} ref={inputEl} onChange={(e) => setQuery(e.target.value)} />;
 };
 
 const NumOfResult = ({ movies }) => {
@@ -254,6 +263,7 @@ const WatchedSummary = ({ watched }) => {
 };
 
 const WatchedList = ({ watched, onDeleteWatched }) => {
+  console.log(watched);
   return (
     <ul className="list">
       {watched.map((movie) => (
@@ -293,6 +303,7 @@ const MovieDetail = ({ selectedId, onCloseMovie, onAddWatch, watched }) => {
   const [movie, setMovie] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   let [userRating, setUserRating] = useState(0);
+  const userRatingClickCount = useRef(0);
   // let title = movie ? movie.Title : "";
   let title = "";
   let loading = true;
@@ -337,11 +348,18 @@ const MovieDetail = ({ selectedId, onCloseMovie, onAddWatch, watched }) => {
     },
     [onCloseMovie]
   );
+  useEffect(
+    function () {
+      if (userRating) userRatingClickCount.current = userRatingClickCount.current + 1;
+    },
+    [userRating]
+  );
   function handleUserRating() {
     const newWatchedMovie = {
       ...movie,
       imdbId: selectedId,
       userRating: userRating,
+      userRatingClickCount,
     };
     onAddWatch(newWatchedMovie);
     onCloseMovie();
