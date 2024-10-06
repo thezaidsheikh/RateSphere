@@ -62,8 +62,9 @@ export default function App() {
     if (id == selectedId) handleCloseMovie();
     else if (id) setSelectedId(id);
   }
-  function handleCloseMovie(selectedId) {
+  function handleCloseMovie() {
     setSelectedId(null);
+    // document.title = "RateSphere";
   }
   function handleAddWatched(movie) {
     setWatched((watched) => [...watched, movie]);
@@ -74,17 +75,21 @@ export default function App() {
   }
   useEffect(
     function () {
+      const controller = new AbortController();
       async function fetchMovies() {
         try {
           setIsLoading(true);
           setErrorMessage("");
-          const res = await fetch(`http://www.omdbapi.com/?apikey=${KEY}&s=${query}`);
+          const res = await fetch(`http://www.omdbapi.com/?apikey=${KEY}&s=${query}`, { signal: controller.signal });
           const data = await res.json();
           if (!data || data.Response == "False") throw new Error("Movie not found");
           setMovies(data.Search);
+          setErrorMessage("");
         } catch (error) {
-          console.log("Error in fetch movies", error);
-          setErrorMessage(error.message);
+          if (error.name !== "AbortError") {
+            console.log("Error in fetch movies", error);
+            setErrorMessage(error.message);
+          }
         } finally {
           setIsLoading(false);
         }
@@ -95,6 +100,9 @@ export default function App() {
         return;
       }
       fetchMovies();
+      return function () {
+        controller.abort();
+      };
     },
     [query]
   );
@@ -285,7 +293,8 @@ const MovieDetail = ({ selectedId, onCloseMovie, onAddWatch, watched }) => {
   const [movie, setMovie] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   let [userRating, setUserRating] = useState(0);
-
+  // let title = movie ? movie.Title : "";
+  let title = "";
   let loading = true;
   useEffect(
     function () {
@@ -296,6 +305,7 @@ const MovieDetail = ({ selectedId, onCloseMovie, onAddWatch, watched }) => {
           const data = await res.json();
           if (!data || data.Response == "False") throw new Error("Movie not found");
           setMovie(data);
+          title = data.Title;
           setIsLoading(false);
         } catch (error) {
           console.log("Error in fetch movies", error);
@@ -304,6 +314,28 @@ const MovieDetail = ({ selectedId, onCloseMovie, onAddWatch, watched }) => {
       getMovieDetail();
     },
     [selectedId]
+  );
+  useEffect(
+    function () {
+      if (title) document.title = "movie | " + movie.Title;
+      return function () {
+        document.title = "RateSphere";
+      };
+    },
+    [title]
+  );
+
+  useEffect(
+    function () {
+      function callback(e) {
+        if (e.key === "Escape") onCloseMovie();
+      }
+      document.addEventListener("keydown", callback);
+      return function () {
+        document.removeEventListener("keydown", callback);
+      };
+    },
+    [onCloseMovie]
   );
   function handleUserRating() {
     const newWatchedMovie = {
